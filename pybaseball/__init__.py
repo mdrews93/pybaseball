@@ -14,6 +14,7 @@ from .league_pitching_stats import bwar_pitch
 from .standings import standings
 from .team_results import schedule_and_record
 from .pitching_leaders import pitching_stats
+from .pitching_leaders import pitching_stats_by_id
 from .batting_leaders import batting_stats
 from .team_pitching import team_pitching
 from .team_batting import team_batting

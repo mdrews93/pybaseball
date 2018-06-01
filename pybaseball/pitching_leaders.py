@@ -78,3 +78,88 @@ def pitching_stats(start_season, end_season=None, league='all', qual=1, ind=1):
     soup = get_soup(start_season=start_season, end_season=end_season, league=league, qual=qual, ind=ind)
     table = get_table(soup, ind)
     return table
+
+
+def get_id_table(soup, ind):
+    tables = soup.find_all('table')
+    table = tables[11]
+    data = []
+    # pulls headings from the fangraphs table
+    headings = []
+    headingrows = table.find_all('th')
+    for row in headingrows[1:]:
+        headings.append(row.text.strip())
+
+    data.append(headings)
+    table_body = table.find('tbody')
+    rows = table_body.find_all('tr')
+
+    for row in rows:
+        cols = row.find_all('td')
+        try:
+            pid = cols[2].find("a")["href"].split("=")[1].split("&")[0]
+            cols = [ele.text.strip() for ele in cols]
+            cols[2] = pid
+            data.append([ele for ele in cols[1:]])
+        except:
+            pass
+
+    data = pd.DataFrame(data)
+    data = data.rename(columns=data.iloc[0])
+    data = data.reindex(data.index.drop(0))
+
+    # replace emptry strings with NaN
+    data.replace(r'^\s*$', np.nan, regex=True, inplace=True)
+
+    # convert all percent strings to proper percetages
+    percentages = ['Contact% (pi)', 'Zone% (pi)', 'Z-Contact% (pi)', 'O-Contact% (pi)', 'Swing% (pi)', 'Z-Swing% (pi)',
+                   'O-Swing% (pi)', 'SL% (pi)', 'SI% (pi)', 'SB% (pi)', 'KN% (pi)', 'FS% (pi)', 'FC% (pi)', 'FA% (pi)',
+                   'CU% (pi)', 'CS% (pi)', 'CH% (pi)', 'TTO%', 'Hard%', 'Med%', 'Soft%', 'Oppo%', 'Cent%', 'Pull%',
+                   'K-BB%', 'Zone% (pfx)', 'Contact% (pfx)', 'Z-Contact% (pfx)', 'O-Contact% (pfx)', 'Swing% (pfx)',
+                   'Z-Swing% (pfx)', 'O-Swing% (pfx)', 'UN% (pfx)', 'KN% (pfx)', 'SC% (pfx)', 'CH% (pfx)', 'EP% (pfx)',
+                   'KC% (pfx)', 'CU% (pfx)', 'SL% (pfx)', 'SI% (pfx)', 'FO% (pfx)', 'FS% (pfx)', 'FC% (pfx)',
+                   'FT% (pfx)', 'FA% (pfx)', 'BB%', 'K%', 'SwStr%', 'F-Strike%', 'Zone%', 'Contact%', 'Z-Contact%',
+                   'O-Contact%', 'Swing%', 'Z-Swing%', 'O-Swing%', 'XX%', 'KN%', 'SF%', 'CH%', 'CB%', 'CT%', 'SL%',
+                   'FB%', 'BUH%', 'IFH%', 'HR/FB', 'IFFB%', 'GB%', 'LD%', 'LOB%', 'XX% (pi)', 'PO%']
+    for col in percentages:
+        # skip if column is all NA (happens for some of the more obscure stats + in older seasons)
+        if data[col].count() > 0:
+            data[col] = data[col].str.strip(' %')
+            data[col] = data[col].str.strip('%')
+            data[col] = data[col].astype(float) / 100.
+        else:
+            # print(col)
+            pass
+
+    # convert everything except name and team to numeric
+    cols_to_numeric = [col for col in data.columns if col not in ['Name', 'Team', 'Age Rng', 'Dollars']]
+    data[cols_to_numeric] = data[cols_to_numeric].astype(float)
+
+    # sort by WAR and wins so best players float to the top
+    data = data.sort_values(['WAR', 'W'], ascending=False)
+    # put WAR at the end because it looks better
+    cols = data.columns.tolist()
+    cols.insert(7, cols.pop(cols.index('WAR')))
+    data = data.reindex(columns=cols)
+    return data
+
+
+def pitching_stats_by_id(start_season, end_season=None, league='all', qual=1, ind=1):
+    """
+    Get season-level pitching data from FanGraphs.
+
+    ARGUMENTS:
+    start_season : int : first season you want data for (or the only season if you do not specify an end_season)
+    end_season : int : final season you want data for
+    league : "all", "nl", or "al"
+    qual: minimum number of pitches thrown to be included in the data (integer). Use the string 'y' for fangraphs default.
+    ind : int : =1 if you want individual season-level data, =0 if you want a player's aggreagate data over all seasons in the query
+    """
+    if start_season is None:
+        raise ValueError(
+            "You need to provide at least one season to collect data for. Try pitching_leaders(season) or pitching_leaders(start_season, end_season).")
+    if end_season is None:
+        end_season = start_season
+    soup = get_soup(start_season=start_season, end_season=end_season, league=league, qual=qual, ind=ind)
+    table = get_id_table(soup, ind)
+    return table
