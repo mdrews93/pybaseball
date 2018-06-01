@@ -47,6 +47,28 @@ def get_soup(start_dt, end_dt):
     return BeautifulSoup(s, "html.parser")
 
 
+def get_id_table(soup):
+    table = soup.find_all('table')[0]
+    data = []
+    headings = [th.get_text() for th in table.find("tr").find_all("th")][1:]
+    data.append(headings)
+    table_body = table.find('tbody')
+    rows = table_body.find_all('tr')
+    for row in rows:
+        cols = row.find_all('td')
+        try:
+            pid = cols[0]["data-append-csv"].split("=")[-1]
+            cols = [ele.text.strip() for ele in cols]
+            cols[0] = pid
+            data.append([ele for ele in cols])
+        except:
+            pass
+    data = pd.DataFrame(data)
+    data = data.rename(columns=data.iloc[0])
+    data = data.reindex(data.index.drop(0))
+    return data
+
+
 def get_table(soup):
     table = soup.find_all('table')[0]
     data = []
@@ -62,6 +84,34 @@ def get_table(soup):
     data = data.rename(columns=data.iloc[0])
     data = data.reindex(data.index.drop(0))
     return data
+
+
+def batting_stats_range_by_id(start_dt=None, end_dt=None):
+    """
+    Get all batting stats for a set time range. This can be the past week, the
+    month of August, anything. Just supply the start and end date in YYYY-MM-DD
+    format.
+    """
+    # make sure date inputs are valid
+    start_dt, end_dt = sanitize_input(start_dt, end_dt)
+    if datetime.datetime.strptime(start_dt, "%Y-%m-%d").year < 2008:
+        raise ValueError("Year must be 2008 or later")
+    if datetime.datetime.strptime(end_dt, "%Y-%m-%d").year < 2008:
+        raise ValueError("Year must be 2008 or later")
+    # retrieve html from baseball reference
+    soup = get_soup(start_dt, end_dt)
+    table = get_id_table(soup)
+    table = table.dropna(how='all')  # drop if all columns are NA
+    # scraped data is initially in string format.
+    # convert the necessary columns to numeric.
+    for column in ['Age', '#days', 'G', 'PA', 'AB', 'R', 'H', '2B', '3B',
+                    'HR', 'RBI', 'BB', 'IBB', 'SO', 'HBP', 'SH', 'SF', 'GDP',
+                    'SB', 'CS', 'BA', 'OBP', 'SLG', 'OPS']:
+        #table[column] = table[column].astype('float')
+        table[column] = pd.to_numeric(table[column])
+        #table['column'] = table['column'].convert_objects(convert_numeric=True)
+    table = table.drop('', 1)
+    return table
 
 
 def batting_stats_range(start_dt=None, end_dt=None):
